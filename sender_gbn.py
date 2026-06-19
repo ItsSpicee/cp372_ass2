@@ -2,14 +2,18 @@ import socket
 import os
 import time
 import select
-from packet import Packet
+import random
+import argparse
+from packet import Packet, HEADER_SIZE
 
 SERVER_ADDRESS = "localhost"
-SERVER_PORT = 6969
+SERVER_PORT = 6970
 TIMEOUT = 1.0
 CHUNK_SIZE = 1024
 INPUT_BUFFER_SIZE = 2048
 WINDOW_SIZE = 4
+
+retransmission_count = 0
 
 class InvalidFileName(Exception):
     pass
@@ -22,7 +26,10 @@ def check_file_name(file_name):
     if len(parts) != 2:
         raise InvalidFileName("File name must be of form xxx.yy")
 
-def send_file_gbn(sock, file_name, server_addr):
+def send_file_gbn(sock, file_name, server_addr, corruption_rate):
+    global retransmission_count
+    retransmission_count = 0
+
     base = 0
     nextseqnum = 0
     buffer = {}          # Only current window cached
@@ -66,6 +73,15 @@ def send_file_gbn(sock, file_name, server_addr):
             if ready:
                 try:
                     data, addr = sock.recvfrom(INPUT_BUFFER_SIZE)
+
+                    # Simulate bit-level corruption of the ACK
+                    if len(data) > HEADER_SIZE and random.random() < corruption_rate:
+                        data = bytearray(data)
+                        idx = random.randint(HEADER_SIZE, len(data) - 1)
+                        bit = random.randint(0, 7)
+                        data[idx] ^= (1 << bit)
+                        data = bytes(data)
+
                     ack_pkt = Packet.from_bytes(data)
 
                     if ack_pkt.ptype == Packet.TYPE_ACK and ack_pkt.ack_num >= base:
@@ -83,25 +99,31 @@ def send_file_gbn(sock, file_name, server_addr):
                         else:
                             timer_start = time.time()
 
-                except ValueError:
+                except ValueError as e:
                     print(f"Bad Packet: {e}")
                     continue  # Corrupted ACK, ignore
 
             # Check timeout
             if timer_start is not None and time.time() - timer_start > TIMEOUT:
                 print(f"Timeout! Retransmitting {base} to {nextseqnum - 1}")
+                retransmission_count += (nextseqnum - base)
                 for seq in range(base, nextseqnum):
                     if seq in buffer:
                         sock.sendto(buffer[seq].to_bytes(), server_addr)
                 timer_start = time.time()
 
     print("File transfer complete!")
+    print(f"RETRANSMISSIONS: {retransmission_count}")
 
-def user_loop(sock):
+def user_loop(sock, corruption_rate):
     server_addr = (SERVER_ADDRESS, SERVER_PORT)
 
     while True:
-        file_name = input("Enter the file name to be transferred (with extension): ")
+        try:
+            file_name = input("Enter the file name to be transferred (with extension): ")
+        except EOFError:
+            print("\nExiting...")
+            break
 
         try:
             check_file_name(file_name)
@@ -110,7 +132,7 @@ def user_loop(sock):
                 print(f"File '{file_name}' not found.")
                 continue
 
-            send_file_gbn(sock, file_name, server_addr)
+            send_file_gbn(sock, file_name, server_addr, corruption_rate)
 
         except InvalidFileName as e:
             print(e)
@@ -118,10 +140,19 @@ def user_loop(sock):
             print("\nExiting...")
             break
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Pure Go-Back-N UDP Sender")
+    parser.add_argument("--loss-rate", type=float, default=0.0,
+                         help="Accepted for CLI uniformity with the receiver; "
+                              "packet loss is simulated on the receiver side only.")
+    parser.add_argument("--corruption-rate", type=float, default=0.0)
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
     print("Setting up Pure Go-Back-N UDP Sender...")
     sender_socket = setup_connection()
-    user_loop(sender_socket)
+    user_loop(sender_socket, args.corruption_rate)
     sender_socket.close()
 
 if __name__ == "__main__":

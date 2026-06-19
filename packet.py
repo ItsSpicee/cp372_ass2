@@ -19,21 +19,21 @@ class Packet:
         3: 'END'
     }
 
-    def __init__(self, seq_num = 0, ack_num = 0, p_type=TYPE_DATA, payload=b'', chksum = 0):
+    def __init__(self, seq_num = 0, ack_num = 0, ptype=TYPE_DATA, payload=b'', chksum = 0):
         self.seq_num = seq_num
         self.ack_num = ack_num
-        self.p_type = ptype
+        self.ptype = ptype
         self.payload = payload
         self.chksum = chksum
-    
-    def compute_checksum():
+
+    def compute_checksum(self):
         # Pack everything except chksum
         temp_header = struct.pack(
 
-            HEADER_FORMAT_TEMP, 
-            self.seq_num, 
+            HEADER_FORMAT_TEMP,
+            self.seq_num,
             self.ack_num,
-            self.ptype, 
+            self.ptype,
             len(self.payload)
 
             )
@@ -43,10 +43,10 @@ class Packet:
             carry = total >> 8        # Get the overflow bits
             total = (total & 0xFF) + carry  # Add them back to the bottom 8 bits
 
-        
+
         return total ^ 0xFF
 
-        
+
     def to_bytes(self):
 
         self.chksum = self.compute_checksum()
@@ -55,33 +55,36 @@ class Packet:
             HEADER_FORMAT_FULL,
             self.seq_num,
             self.ack_num,
-            self.p_type,
+            self.ptype,
             len(self.payload),
             self.chksum
 
         )
-        
+
         return header + self.payload
-    
-    @classmethod 
+
+    @classmethod
     def from_bytes(cls, raw_data):
         if len(raw_data) < HEADER_SIZE:
             raise ValueError("Data too short for header.")
-        
+
         header = raw_data[:HEADER_SIZE]
 
         #Unpack header
         seq_num, ack_num, ptype, payload_len, chksum = struct.unpack(HEADER_FORMAT_FULL, header)
 
+        if len(raw_data) < HEADER_SIZE + payload_len:
+            raise ValueError("Data too short for declared payload length.")
+
         payload = raw_data[HEADER_SIZE:HEADER_SIZE + payload_len]
 
          # Create packet with extracted checksum
         packet = cls(seq_num, ack_num, ptype, payload, chksum)
-        
+
         # Verify checksum
         if packet.compute_checksum() != chksum:
             raise ValueError("Checksum mismatch — packet corrupted!")
-        
+
         return packet
 
 

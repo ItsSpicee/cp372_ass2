@@ -1,11 +1,11 @@
 import socket
 import random
-from packet import Packet
+import argparse
+from packet import Packet, HEADER_SIZE
 
 HOST = "localhost"
-PORT = 6969
+PORT = 6970
 INPUT_BUFFER_SIZE = 2048
-LOSS_RATE = 0.0  # Change to 0.1, 0.2, 0.3 for testing
 
 def setup_socket():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -18,7 +18,7 @@ def send_ack(sock, addr, seq_num):
     sock.sendto(ack_pkt.to_bytes(), addr)
     print(f"Sent cumulative ACK up to {seq_num}")
 
-def receiver_loop(sock):
+def receiver_loop(sock, loss_rate, corruption_rate):
     expected_seq = 0
     file_handle = None
     file_name = None
@@ -27,9 +27,17 @@ def receiver_loop(sock):
         data, addr = sock.recvfrom(INPUT_BUFFER_SIZE)
 
         # Simulate packet loss
-        if random.random() < LOSS_RATE:
+        if random.random() < loss_rate:
             print("Simulated packet loss!")
             continue
+
+        # Simulate bit-level corruption
+        if len(data) > HEADER_SIZE and random.random() < corruption_rate:
+            data = bytearray(data)
+            idx = random.randint(HEADER_SIZE, len(data) - 1)
+            bit = random.randint(0, 7)
+            data[idx] ^= (1 << bit)
+            data = bytes(data)
 
         # Parse packet (handle corruption)
         try:
@@ -75,10 +83,17 @@ def receiver_loop(sock):
                 send_ack(sock, addr, expected_seq - 1)
             # If expected_seq == 0, nothing valid received yet — don't ACK
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Go-Back-N UDP Receiver")
+    parser.add_argument("--loss-rate", type=float, default=0.0)
+    parser.add_argument("--corruption-rate", type=float, default=0.0)
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
     sock = setup_socket()
     try:
-        receiver_loop(sock)
+        receiver_loop(sock, args.loss_rate, args.corruption_rate)
     except KeyboardInterrupt:
         print("\nShutting down receiver...")
     finally:
