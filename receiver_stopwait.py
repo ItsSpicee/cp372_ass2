@@ -6,7 +6,6 @@ from packet import Packet, HEADER_SIZE
 
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6969
-TIMEOUT = 1.0
 BUFFER_SIZE = 2048
 
 def setup_connection():

@@ -8,10 +8,10 @@ from packet import Packet, HEADER_SIZE
 
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6970
-TIMEOUT = 1.0
+TIMEOUT = 0.3
 CHUNK_SIZE = 1024
 INPUT_BUFFER_SIZE = 2048
-WINDOW_SIZE = 4
+WINDOW_SIZE = 8
 
 retransmission_count = 0
 
