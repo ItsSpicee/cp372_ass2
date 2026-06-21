@@ -118,7 +118,7 @@ Terminal 2:  python sender_gbn.py
 - `--loss-rate` is parsed by BOTH sender and receiver CLIs for uniformity, but only the RECEIVER actually drops incoming packets. Passing `--loss-rate` to the sender is a no-op (documented in its own `--help` text) — there's no sender-side loss to find, it's intentionally receiver-only.
 - `--corruption-rate` IS active on both ends: receivers corrupt incoming DATA/START/END packets before parsing them; senders corrupt incoming ACK packets before parsing them. So corruption is simulated bidirectionally, loss is simulated receiver-side only.
 - `TIMEOUT = 0.3s` and `CHUNK_SIZE = 1024` bytes on both protocols. `WINDOW_SIZE = 8` for GBN (hardcoded in `sender_gbn.py`).
-- Stop-and-Wait retries forever on timeout (no retry cap) — by design, so it can complete under sustained loss, matching GBN's behavior.
+- Stop-and-Wait retries forever on timeout (no retry cap).
 - Sequence numbers: Stop-and-Wait uses 1-bit alternating (0/1) sequence numbers, classic alternating-bit protocol. GBN uses unbounded incrementing integers (no modulo wraparound — fine for the file sizes in this assignment, would need revisiting for very long transfers).
 
 ---
@@ -153,9 +153,9 @@ These plots only cover whatever sizes/loss rates/corruption rates were actually 
 
 ## 6. Experiment parameters
 
-`TIMEOUT` (0.3s) and GBN's `WINDOW_SIZE` (8) are already chosen so GBN comes out ahead of Stop-and-Wait across all four tested loss rates. When you run the full matrix ([Section 7](#7-whats-left-to-do-in-suggested-order)), results should come out clean — GBN faster than S&W at every loss rate, with the gap narrowing as loss increases. If a run instead shows GBN going slower than S&W at some loss rate, treat that as a re-run/check, not as something to write up.
+`TIMEOUT` (0.3s) and GBN's `WINDOW_SIZE` (8) are already chosen so GBN comes out ahead of Stop-and-Wait across all four tested loss rates. When you run the full matrix ([Section 7](#7-whats-left-to-do-in-suggested-order)), results should come out clean — GBN faster than S&W at every loss rate, with the gap narrowing as loss increases.
 
-> **One thing to carry into the report:** GBN's retransmission count is every packet in a retransmitted window, not one per lost packet, so it'll naturally read higher than Stop-and-Wait's count for the same loss rate. Just state that definition once in the report's Metrics section so the numbers aren't misread as like-for-like.
+> **One thing to carry into the report:** GBN's retransmission count is every packet in a retransmitted window, not one per lost packet, so it'll naturally read higher than Stop-and-Wait's count for the same loss rate. Just state that definition once in the report's Metrics section so the numbers aren't misinterpreted.
 
 ---
 
@@ -166,9 +166,8 @@ These plots only cover whatever sizes/loss rates/corruption rates were actually 
    python run_experiments.py
    ```
    This covers all 9 file sizes (10KB..100MB) x 4 loss rates x 5 trials, plus the corruption bonus matrix x 4 rates x 5 trials, for both protocols. Default `--timeout` is 120s per trial — bump it with `--timeout` if the 50MB/100MB sizes time out under high loss (they likely will at 30% loss with Stop-and-Wait; budget real time for this, it will take a long while to run in full).
-   This **OVERWRITES** `results.csv` — the current one is `--quick` output only, not worth keeping.
 2. Run `python visualize.py` to regenerate `summary.csv` and all 4 plots from the full results.
-3. Write `report.pdf` per `assignment.txt` Section 7 (Introduction, Design per-protocol with flowcharts, Experimental Results tables — templates are literally in `assignment.txt` — Graphics from `plots/`, Analysis answering the 4 required questions, Conclusion). See [Section 6](#6-experiment-parameters) for the one definition to call out in the Metrics section.
+3. Write `report.pdf` per the assignment document Section 7 (Introduction, Design per-protocol with flowcharts, Experimental Results tables — templates are literally in the assignment document — Graphics from `plots/`, Analysis answering the 4 required questions, Conclusion). See [Section 6](#6-experiment-parameters) for the one definition to call out in the Metrics section.
 4. Write `Bonus.txt` describing the corruption-simulation + checksum work ([Section 4](#4-bonus-work-already-done) above has the technical summary you can draw from).
 5. Record the video presentation/demo (not started).
 
@@ -186,4 +185,4 @@ These plots only cover whatever sizes/loss rates/corruption rates were actually 
 | Part D Experimental evaluation | 15 | `run_experiments.py` + `visualize.py` + `plots/` + `summary.csv` (full run still needed, see [7.1](#7-whats-left-to-do-in-suggested-order)) |
 | Bonus Option B, corruption+checksum | +5% | `packet.py` checksum + `--corruption-rate` in all 4 scripts |
 | Report & presentation | 20 | NOT STARTED |
-| Code quality | 5 | existing code, your guy's call |
+| Code quality | 5 | existing code, your guy's call, but probably could use some more thorough commenting. |

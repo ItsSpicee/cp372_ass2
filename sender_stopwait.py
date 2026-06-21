@@ -36,8 +36,6 @@ def send_and_wait_for_ack(sock, packet, server_addr, expected_ack_num, corruptio
     global retransmission_count
     retries = 0
 
-    # Retry indefinitely (no cap) so transfers can complete under sustained
-    # loss, mirroring GBN's uncapped retransmission behavior.
     while True:
         sock.sendto(packet.to_bytes(), server_addr)
         sock.settimeout(TIMEOUT)
@@ -102,7 +100,7 @@ def send_file(sock, file_name, server_addr, corruption_rate):
                 print("Transfer failed")
                 return
 
-            seq_num = 1 - seq_num  # Flip for next packet: 0↔1
+            seq_num = 1 - seq_num  # Flip for next packet: 0<->1
 
     # Step 3: Send END packet
     end_pkt = Packet(
@@ -159,9 +157,6 @@ def main():
     sender_socket = setup_connection()
     user_loop(sender_socket, args.corruption_rate)
     sender_socket.close()
-
-
-
 
 if __name__ == "__main__":
     main()
