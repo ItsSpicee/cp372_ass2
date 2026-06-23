@@ -1,4 +1,5 @@
 import socket
+import os
 import random
 import argparse
 from packet import Packet, HEADER_SIZE
@@ -51,7 +52,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
         if pkt.seq_num == expected_seq:
             # In-order packet — process by type
             if pkt.ptype == Packet.TYPE_START:
-                file_name = pkt.payload.decode()
+                file_name = os.path.basename(pkt.payload.decode())
                 print(f"Starting transfer: '{file_name}'")
                 file_handle = open(file_name, "wb")
 

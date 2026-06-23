@@ -1,4 +1,5 @@
 import socket
+import os
 import random
 import argparse
 
@@ -53,7 +54,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
 
         # === TYPE_START: Begin file transfer ===
         if pkt.ptype == Packet.TYPE_START:
-            file_name = pkt.payload.decode()
+            file_name = os.path.basename(pkt.payload.decode())
             print(f"Starting transfer: '{file_name}'")
 
             # Create/truncate file
