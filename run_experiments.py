@@ -67,6 +67,8 @@ def start_receiver(protocol, loss_rate, corruption_rate):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     time.sleep(BIND_WAIT)
+    if proc.poll() is not None:
+        raise RuntimeError(f"Receiver ({protocol}) exited immediately — port may be in use")
     return proc
 
 
