@@ -7,10 +7,10 @@ HOST = "localhost"
 PORT = 6970
 INPUT_BUFFER_SIZE = 2048
 
-def setup_socket():
+def setup_socket(host=HOST, port=PORT):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((HOST, PORT))
-    print(f"GBN Receiver listening on {HOST}:{PORT}")
+    sock.bind((host, port))
+    print(f"GBN Receiver listening on {host}:{port}")
     return sock
 
 def send_ack(sock, addr, seq_num):
@@ -87,11 +87,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Go-Back-N UDP Receiver")
     parser.add_argument("--loss-rate", type=float, default=0.0)
     parser.add_argument("--corruption-rate", type=float, default=0.0)
+    parser.add_argument("--host", type=str, default=HOST)
+    parser.add_argument("--port", type=int, default=PORT)
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    sock = setup_socket()
+    sock = setup_socket(args.host, args.port)
     try:
         receiver_loop(sock, args.loss_rate, args.corruption_rate)
     except KeyboardInterrupt:

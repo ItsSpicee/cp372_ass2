@@ -115,8 +115,8 @@ def send_file_gbn(sock, file_name, server_addr, corruption_rate):
     print("File transfer complete!")
     print(f"RETRANSMISSIONS: {retransmission_count}")
 
-def user_loop(sock, corruption_rate):
-    server_addr = (SERVER_ADDRESS, SERVER_PORT)
+def user_loop(sock, corruption_rate, host, port):
+    server_addr = (host, port)
 
     while True:
         try:
@@ -146,13 +146,15 @@ def parse_args():
                          help="Accepted for CLI uniformity with the receiver; "
                               "packet loss is simulated on the receiver side only.")
     parser.add_argument("--corruption-rate", type=float, default=0.0)
+    parser.add_argument("--host", type=str, default=SERVER_ADDRESS)
+    parser.add_argument("--port", type=int, default=SERVER_PORT)
     return parser.parse_args()
 
 def main():
     args = parse_args()
     print("Setting up Pure Go-Back-N UDP Sender...")
     sender_socket = setup_connection()
-    user_loop(sender_socket, args.corruption_rate)
+    user_loop(sender_socket, args.corruption_rate, args.host, args.port)
     sender_socket.close()
 
 if __name__ == "__main__":

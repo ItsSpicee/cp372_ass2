@@ -8,10 +8,9 @@ SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6969
 BUFFER_SIZE = 2048
 
-def setup_connection():
+def setup_connection(host=SERVER_ADDRESS, port=SERVER_PORT):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((SERVER_ADDRESS, SERVER_PORT))
-
+    sock.bind((host, port))
     return sock
 
 def send_ack(sock, addr, seq_num):
@@ -124,6 +123,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Stop-and-Wait UDP Receiver")
     parser.add_argument("--loss-rate", type=float, default=0.0)
     parser.add_argument("--corruption-rate", type=float, default=0.0)
+    parser.add_argument("--host", type=str, default=SERVER_ADDRESS)
+    parser.add_argument("--port", type=int, default=SERVER_PORT)
     return parser.parse_args()
 
 
@@ -132,7 +133,7 @@ def main():
 
     print("Setting up UDP Socket...")
 
-    receiver_socket = setup_connection()
+    receiver_socket = setup_connection(args.host, args.port)
     receiver_loop(receiver_socket, args.loss_rate, args.corruption_rate)
     receiver_socket.close()
 
