@@ -8,6 +8,7 @@ SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6969
 TIMEOUT = 0.3
 CHUNK_SIZE = 1024
+MAX_RETRIES = 20
 
 retransmission_count = 0
 
@@ -22,9 +23,8 @@ def setup_connection():
     return sock
 
 def check_file_name(file_name):
-    parts = file_name.split(".")
-
-    if len(parts) != 2: raise InvalidFileName("File name must of form xxx.yy")
+    if '.' not in os.path.basename(file_name):
+        raise InvalidFileName("File must have an extension")
 
 def notify_server(sock, file_name, server_addr, seq_num, corruption_rate):
     start_pkt = Packet(seq_num=seq_num, ptype=Packet.TYPE_START, payload=file_name.encode())
@@ -68,6 +68,9 @@ def send_and_wait_for_ack(sock, packet, server_addr, expected_ack_num, corruptio
                 retries += 1
                 retransmission_count += 1
                 print(f"Timeout #{retries}, retransmitting...")
+                if retries >= MAX_RETRIES:
+                    print("Max retries reached, giving up.")
+                    return False
                 break  # Break inner, retransmit in outer
 
 def send_file(sock, file_name, server_addr, corruption_rate):
@@ -157,8 +160,10 @@ def main():
     args = parse_args()
     print("Setting up UDP Socket...")
     sender_socket = setup_connection()
-    user_loop(sender_socket, args.corruption_rate, args.host, args.port)
-    sender_socket.close()
+    try:
+        user_loop(sender_socket, args.corruption_rate, args.host, args.port)
+    finally:
+        sender_socket.close()
 
 if __name__ == "__main__":
     main()

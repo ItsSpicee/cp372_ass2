@@ -12,6 +12,7 @@ TIMEOUT = 0.3
 CHUNK_SIZE = 1024
 INPUT_BUFFER_SIZE = 2048
 WINDOW_SIZE = 8
+MAX_SEQ = 256
 
 retransmission_count = 0
 
@@ -22,9 +23,8 @@ def setup_connection():
     return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 def check_file_name(file_name):
-    parts = file_name.split(".")
-    if len(parts) != 2:
-        raise InvalidFileName("File name must be of form xxx.yy")
+    if '.' not in os.path.basename(file_name):
+        raise InvalidFileName("File must have an extension")
 
 def send_file_gbn(sock, file_name, server_addr, corruption_rate):
     global retransmission_count
@@ -32,19 +32,21 @@ def send_file_gbn(sock, file_name, server_addr, corruption_rate):
 
     base = 0
     nextseqnum = 0
-    buffer = {}          # Only current window cached
+    buffer = {}
     timer_start = None
-    eof_reached = False  # True when f.read() returns empty
+    eof_reached = False
+    started = False  # tracks whether START packet has been queued
 
     with open(file_name, "rb") as f:
 
-        while base < nextseqnum or not eof_reached:
+        while base != nextseqnum or not eof_reached:
 
             # Send new packets while window allows
-            while nextseqnum < base + WINDOW_SIZE:
-                if nextseqnum == 0:
+            while ((nextseqnum - base) % MAX_SEQ) < WINDOW_SIZE:
+                if not started:
                     chunk = file_name.encode()
                     ptype = Packet.TYPE_START
+                    started = True
                 elif not eof_reached:
                     chunk = f.read(CHUNK_SIZE)
                     if not chunk:
@@ -65,7 +67,7 @@ def send_file_gbn(sock, file_name, server_addr, corruption_rate):
                 if base == nextseqnum:
                     timer_start = time.time()
 
-                nextseqnum += 1
+                nextseqnum = (nextseqnum + 1) % MAX_SEQ
 
             # Check for ACKs (non-blocking)
             ready, _, _ = select.select([sock], [], [], 0.01)
@@ -84,13 +86,16 @@ def send_file_gbn(sock, file_name, server_addr, corruption_rate):
 
                     ack_pkt = Packet.from_bytes(data)
 
-                    if ack_pkt.ptype == Packet.TYPE_ACK and ack_pkt.ack_num >= base:
-                        new_base = ack_pkt.ack_num + 1
-                        print(f"Cumulative ACK up to {ack_pkt.ack_num}")
+                    ack_num = ack_pkt.ack_num
+                    if ack_pkt.ptype == Packet.TYPE_ACK and ((ack_num - base) % MAX_SEQ) < WINDOW_SIZE:
+                        new_base = (ack_num + 1) % MAX_SEQ
+                        print(f"Cumulative ACK up to {ack_num}")
 
-                        # Free old packets that left the window
-                        for seq in range(base, new_base):
+                        # Free acked packets (with wraparound)
+                        seq = base
+                        while seq != new_base:
                             buffer.pop(seq, None)
+                            seq = (seq + 1) % MAX_SEQ
 
                         base = new_base
 
@@ -105,11 +110,15 @@ def send_file_gbn(sock, file_name, server_addr, corruption_rate):
 
             # Check timeout
             if timer_start is not None and time.time() - timer_start > TIMEOUT:
-                print(f"Timeout! Retransmitting {base} to {nextseqnum - 1}")
-                retransmission_count += (nextseqnum - base)
-                for seq in range(base, nextseqnum):
+                seq = base
+                count = 0
+                while seq != nextseqnum:
+                    count += 1
                     if seq in buffer:
                         sock.sendto(buffer[seq].to_bytes(), server_addr)
+                    seq = (seq + 1) % MAX_SEQ
+                print(f"Timeout! Retransmitting {count} packet(s) from base={base}")
+                retransmission_count += count
                 timer_start = time.time()
 
     print("File transfer complete!")
@@ -154,8 +163,10 @@ def main():
     args = parse_args()
     print("Setting up Pure Go-Back-N UDP Sender...")
     sender_socket = setup_connection()
-    user_loop(sender_socket, args.corruption_rate, args.host, args.port)
-    sender_socket.close()
+    try:
+        user_loop(sender_socket, args.corruption_rate, args.host, args.port)
+    finally:
+        sender_socket.close()
 
 if __name__ == "__main__":
     main()
