@@ -67,6 +67,8 @@ def start_receiver(protocol, loss_rate, corruption_rate):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     time.sleep(BIND_WAIT)
+    if proc.poll() is not None:
+        raise RuntimeError(f"Receiver ({protocol}) exited immediately — port may be in use")
     return proc
 
 
@@ -87,8 +89,9 @@ def run_sender(protocol, file_name, loss_rate, corruption_rate, timeout):
     ]
     start = time.time()
     try:
+        stdin_input = f"1\n{file_name}\n" if protocol == "gbn" else f"{file_name}\n"
         result = subprocess.run(
-            cmd, cwd=TEST_FILES_DIR, input=file_name + "\n",
+            cmd, cwd=TEST_FILES_DIR, input=stdin_input,
             capture_output=True, text=True, timeout=timeout,
         )
         stdout = result.stdout
