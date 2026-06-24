@@ -90,7 +90,7 @@ def run_sender(protocol, file_name, loss_rate, corruption_rate, timeout):
     start = time.time()
     try:
         result = subprocess.run(
-            cmd, cwd=TEST_FILES_DIR, input=file_name + "\n",
+            cmd, cwd=TEST_FILES_DIR, input=f"1\n{file_name}\n",
             capture_output=True, text=True, timeout=timeout,
         )
         stdout = result.stdout
