@@ -15,6 +15,20 @@ from sender_gbn import send_file_gbn, ack_receiver, check_file_name, InvalidFile
 from receiver_gbn import receiver_loop
 
 
+def _run_receiver(sock, loss_rate, corruption_rate):
+    # On Windows, closing a socket while recvfrom blocks raises WinError 10038
+    # (OSError). Socket timeouts cause receiver_loop to exit; we restart it.
+    # A real OSError (socket closed) exits cleanly.
+    while True:
+        try:
+            receiver_loop(sock, loss_rate, corruption_rate)
+            break
+        except socket.timeout:
+            continue
+        except OSError:
+            break
+
+
 def md5(path):
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -82,11 +96,12 @@ class TestParallelDuplexTransfer(unittest.TestCase):
 
         recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_sock.bind((host, port))
+        recv_sock.settimeout(1.0)
 
         os.chdir(self.recv_dir)
 
         recv_thread = threading.Thread(
-            target=receiver_loop,
+            target=_run_receiver,
             args=(recv_sock, loss_rate, corruption_rate),
             daemon=True
         )
@@ -200,10 +215,11 @@ class TestNFileTransfer(unittest.TestCase):
 
         recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         recv_sock.bind((host, port))
+        recv_sock.settimeout(1.0)
         os.chdir(self.recv_dir)
 
         threading.Thread(
-            target=receiver_loop,
+            target=_run_receiver,
             args=(recv_sock, loss_rate, corruption_rate),
             daemon=True
         ).start()
