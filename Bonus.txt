@@ -1,0 +1,70 @@
+CP372 Assignment 2 - Bonus Work
+================================
+
+We implemented bonus work in two areas. The main bonus is the parallel
+multi-file transfer, We also implemented packet corruption detection with checksums
+(the assignment's Option B).
+
+
+1. PARALLEL MULTI-FILE TRANSFER 
+-----------------------------------------------------
+Our Go-Back-N implementation can reliably transfer multiple files at the same
+time over a SINGLE UDP socket, rather than one file after another.
+
+How it works:
+- We added a 1-byte "file_id" field to the packet header. Every DATA, START,
+  END and ACK packet carries the id of the file it belongs to, and the field
+  is included in the checksum so a corrupted id is detected.
+- On the sender, each file is transferred by its own thread running an
+  independent Go-Back-N state machine (its own base, nextseqnum and window).
+  All threads share one UDP socket, protected by a lock so sends do not
+  interleave mid-packet.
+- A single dedicated ACK-receiver thread reads every incoming ACK, looks at
+  its file_id, and routes it to the correct file's state using a per-file
+  condition variable. This "demultiplexing" is what lets many independent
+  Go-Back-N transfers share one socket without their ACKs getting crossed.
+- On the receiver, packets are sorted by file_id so each file is written to
+  its own output file. Streams never get mixed even when their packets are
+  interleaved on the wire.
+
+The sender supports 1 to 255 concurrent files (chosen at the prompt). When
+asked for a single file it behaves exactly like the standard Go-Back-N
+protocol required by Part C, so the base assignment still runs unchanged.
+
+Correctness testing:
+- test_parallel_multiplex.py contains 15 unit tests, all passing. They verify:
+    * the file_id survives encode/decode and is covered by the checksum,
+    * two and four files transferred simultaneously all arrive complete,
+    * each received file matches the original byte-for-byte (MD5 compared),
+    * files are never mixed (no foreign bytes in any output file),
+    * multi-file transfer still succeeds with 10% simulated packet loss.
+  Run them with:  python -m unittest test_parallel_multiplex
+
+
+2. PACKET CORRUPTION + CHECKSUM (Option B)
+------------------------------------------
+- Every packet includes an 8-bit checksum computed over the full header (minus
+  the checksum byte itself) and the payload, folded into 8 bits and inverted.
+- A --corruption-rate flag on the receivers (and on the senders for incoming
+  ACKs) flips one random bit in a packet with the given probability before it
+  is parsed.
+- Packet.from_bytes() recomputes the checksum and rejects any packet whose
+  checksum does not match. A corrupted packet is dropped silently with no ACK,
+  and the normal timeout/retransmit machinery recovers it - no separate
+  corruption-handling code path was needed.
+- run_experiments.py includes a corruption-rate matrix (0%, 5%, 10%, 15%) so
+  the effect of corruption on transfer time can be measured alongside loss.
+
+
+HOW TO DEMONSTRATE
+------------------
+Parallel transfer:
+    Terminal 1:  python receiver_gbn.py
+    Terminal 2:  python sender_gbn.py
+                 Enter the number of files to transfer: 3
+                 (then enter three file names)
+
+Corruption detection:
+    Terminal 1:  python receiver_gbn.py --corruption-rate 0.1
+    Terminal 2:  python sender_gbn.py   (transfer any file; it still arrives
+                 intact because corrupted packets are caught and retransmitted)

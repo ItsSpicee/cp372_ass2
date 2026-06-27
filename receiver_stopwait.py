@@ -1,3 +1,25 @@
+'''
+CP372 - Computer Networks, Spring 2026
+Assignment 2: Reliable Data Transfer over UDP
+
+Script Name: receiver_stopwait.py
+Description: Stop-and-Wait receiver (Parts A and B). Receives packets over UDP,
+             writes in-order DATA to a file, and acknowledges each packet. It
+             can simulate packet loss and corruption (Part B / bonus) so the
+             sender's retransmission logic can be tested.
+Capabilities:
+    - Reconstruct a file from START / DATA / END packets
+    - Acknowledge in-order packets and re-ACK duplicates
+    - Optionally drop or corrupt incoming packets at a configurable rate
+
+Authors:
+    Obeidi, Bassil
+    Barghouti, Alaa
+    Ozog, Philip
+    Soja, Max
+    Yamin, Noah
+'''
+
 import socket
 import os
 import re
@@ -6,11 +28,13 @@ import argparse
 
 from packet import Packet, HEADER_SIZE
 
+# Listening address and receive buffer size.
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6969
 BUFFER_SIZE = 2048
 
 def setup_connection(host=SERVER_ADDRESS, port=SERVER_PORT):
+    """Create the UDP socket and bind it to the listening address/port."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((host, port))
     return sock
@@ -22,7 +46,12 @@ def send_ack(sock, addr, seq_num):
     print(f"Sent ACK for seq={seq_num}")
 
 def receiver_loop(sock, loss_rate, corruption_rate):
-    expected_seq = 0
+    """
+    Main receive loop. Reads packets forever, optionally simulating loss and
+    corruption, then handles each by type: START opens the output file, DATA is
+    written when in order (duplicates are re-ACKed), and END closes the file.
+    """
+    expected_seq = 0          # the sequence number we expect next (0/1)
     file_name = None
     file_handle = None
     transfer_active = False
@@ -32,12 +61,13 @@ def receiver_loop(sock, loss_rate, corruption_rate):
 
             data, addr = sock.recvfrom(BUFFER_SIZE)
 
-            # Simulate packet loss
+            # Simulate packet loss: drop this packet entirely (no ACK sent).
             if random.random() < loss_rate:
                 print("Simulated packet loss!")
                 continue
 
-            # Simulate bit-level corruption
+            # Simulate bit-level corruption: flip one random bit so the
+            # checksum check below will reject the packet.
             if len(data) > HEADER_SIZE and random.random() < corruption_rate:
                 data = bytearray(data)
                 idx = random.randint(HEADER_SIZE, len(data) - 1)
@@ -56,6 +86,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
 
             # === TYPE_START: Begin file transfer ===
             if pkt.ptype == Packet.TYPE_START:
+                # Validate the filename to avoid unsafe paths before opening it.
                 raw_name = os.path.basename(pkt.payload.decode('utf-8', errors='replace'))
                 if not re.fullmatch(r'[\w\-]+(\.[\w]+)+', raw_name):
                     print(f"Rejected unsafe filename: '{raw_name}'")
@@ -126,11 +157,13 @@ def receiver_loop(sock, loss_rate, corruption_rate):
                 print("Received ACK on receiver? Ignoring.")
 
     finally:
+        # Always close the output file on shutdown/error.
         if file_handle:
             file_handle.close()
 
 
 def parse_args():
+    """Parse command-line options (loss/corruption rates and host/port)."""
     parser = argparse.ArgumentParser(description="Stop-and-Wait UDP Receiver")
     parser.add_argument("--loss-rate", type=float, default=0.0)
     parser.add_argument("--corruption-rate", type=float, default=0.0)
@@ -140,6 +173,7 @@ def parse_args():
 
 
 def main():
+    """Entry point: bind the socket and run the receive loop until Ctrl+C."""
     args = parse_args()
 
     print("Setting up UDP Socket...")
