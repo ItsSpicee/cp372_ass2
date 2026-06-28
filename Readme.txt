@@ -12,16 +12,34 @@ REQUIREMENTS
 
 FILES
 -----
-  packet.py              Shared packet format + 8-bit checksum logic.
-                         Imported by the senders/receivers; never run directly.
-  sender_stopwait.py     Stop-and-Wait sender (Part A)
-  receiver_stopwait.py   Stop-and-Wait receiver (Parts A and B)
-  sender_gbn.py          Go-Back-N sender (Part C) + parallel multi-file bonus
-  receiver_gbn.py        Go-Back-N receiver (Part C)
-  run_experiments.py     Automates Part D (drives sender/receiver across file
-                         sizes, loss rates and corruption rates, 5 trials each)
-  visualize.py           Builds summary.csv + plots from run_experiments output
-  test_parallel_multiplex.py   Unit tests for the parallel multi-file bonus
+The repo root holds only the files being submitted/marked; supporting code is
+organised into folders.
+
+  Root (submission files + the code that runs them)
+    sender_stopwait.py     Stop-and-Wait sender (Part A)
+    receiver_stopwait.py   Stop-and-Wait receiver (Parts A and B)
+    sender_gbn.py          Go-Back-N sender (Part C) + parallel multi-file bonus
+    receiver_gbn.py        Go-Back-N receiver (Part C)
+    packet.py              Shared packet format + 8-bit checksum logic.
+                           Imported by the senders/receivers; never run directly.
+    gbn_trace.py           Optional tracing hooks for the GBN sender; a near-zero
+                           no-op unless the visualizer attaches.
+    report.pdf             Project report
+    Readme.txt             This file
+    Bonus.txt              Description of the bonus work
+
+Supporting material (not required to run the protocols) is kept in folders:
+  tests/
+    test_parallel_multiplex.py   Unit tests for the parallel multi-file bonus
+  experiments/ Part D automation + report figures:
+    run_experiments.py     Drives sender/receiver across file sizes, loss rates
+                           and corruption rates (5 trials each)
+    visualize.py           Builds summary.csv + plots from run_experiments output
+    visualize_gbn_threads.py   Live animation of the GBN sender's threads
+  media/       Pre-rendered figures (gbn_threads.png / .gif)
+
+The four protocol scripts run straight from the repo root with no setup
+(e.g. `python sender_gbn.py`).
 
 
 PORTS
@@ -76,38 +94,40 @@ Both flags are passed to the RECEIVER:
   python receiver_gbn.py --loss-rate 0.2 --corruption-rate 0.05
 
   --loss-rate FLOAT         probability [0.0-1.0] each incoming packet is dropped
-  --corruption-rate FLOAT   probability [0.0-1.0] one random bit is flipped in
-                            an incoming packet (caught by the checksum)
+  --corruption-rate FLOAT   probability [0.0-1.0] one random bit is flipped in an
+                            incoming packet's payload (caught by the checksum)
 
-The senders also accept --corruption-rate (applied to incoming ACKs). The
-senders accept --loss-rate too, but it is a no-op: loss is simulated on the
-receiver side only.
+The senders accept --loss-rate and --corruption-rate too for CLI uniformity, but
+both effects are simulated on the receiver side.
 
 
 REPRODUCING THE EXPERIMENTS (Part D)
 ------------------------------------
-  1.  python run_experiments.py
+  1.  python experiments/run_experiments.py
         Generates test files, runs both protocols across all file sizes /
         loss rates / corruption rates (5 trials each), writes results.csv.
         Add --quick for a fast smoke test, or --skip-bonus to skip the
         corruption matrix.
-  2.  python visualize.py
+  2.  python experiments/visualize.py
         Reads results.csv, writes summary.csv (averaged numbers used for the
-        report tables) and 4 charts into the plots/ folder.
+        report tables) and 4 charts into the repo-root media/ folder.
 
-Generated automatically (not committed): test_files/, received_files/,
-results.csv, summary.csv, plots/.
+Generated automatically (not committed): experiments/test_files/,
+experiments/received_files/, experiments/results.csv, experiments/summary.csv,
+and the 4 charts in the repo-root media/ folder.
 
 
 ASSUMPTIONS
 -----------
 - Sender and receiver run on localhost.
-- File names must contain an extension (exactly one dot, e.g. myfile.txt).
+- File names must contain an extension, i.e. at least one dot (e.g. myfile.txt).
+  Multiple extensions such as archive.tar.gz are also accepted.
 - CHUNK_SIZE = 1024 bytes and TIMEOUT = 0.3s on both protocols.
 - Go-Back-N uses WINDOW_SIZE = 8 and sequence numbers modulo 256.
-- Stop-and-Wait uses 1-bit alternating (0/1) sequence numbers and retries
-  on timeout without a retry cap.
-- A packet that fails its checksum (corrupted) is dropped silently and no ACK
-  is sent; the existing timeout/retransmit logic recovers it.
-- 50MB and 100MB file sizes are commented out in run_experiments.py to keep
-  runtime reasonable; re-enable those lines for the full size sweep.
+- Stop-and-Wait uses 1-bit alternating (0/1) sequence numbers and retransmits on
+  timeout for up to MAX_RETRIES (20) consecutive timeouts before giving up on a
+  packet. Go-Back-N retransmits its window on timeout without a retry cap.
+- A packet that fails its checksum (corrupted) is dropped and no ACK is sent;
+  the existing timeout/retransmit logic recovers it.
+- run_experiments.py runs all nine file sizes (10KB through 100MB); the largest
+  sizes dominate the runtime, so use --quick for a fast reduced run.

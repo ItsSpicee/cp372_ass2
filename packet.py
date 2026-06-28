@@ -31,7 +31,7 @@ import struct
 HEADER_FORMAT_TEMP = '!IIBBI'
 HEADER_FORMAT_FULL = '!IIBBIB'
 
-# Total header size in bytes (14), computed from the full format string.
+# Total header size in bytes (15), computed from the full format string.
 HEADER_SIZE =  struct.calcsize(HEADER_FORMAT_FULL)
 
 class Packet:
@@ -65,7 +65,7 @@ class Packet:
         repeatedly adding any overflow back in, then inverted with XOR 0xFF.
         Returns the checksum as an integer in the range 0-255.
         """
-        # Pack everything except chksum
+        # Pack every field except the checksum itself.
         temp_header = struct.pack(
 
             HEADER_FORMAT_TEMP,
@@ -80,8 +80,8 @@ class Packet:
 
         # Fold the running total down into a single byte (8 bits).
         while total > 0xFF:
-            carry = total >> 8        # Get the overflow bits
-            total = (total & 0xFF) + carry  # Add them back to the bottom 8 bits
+            carry = total >> 8        # the overflow bits
+            total = (total & 0xFF) + carry  # add them back to the low 8 bits
 
 
         return total ^ 0xFF
@@ -121,7 +121,7 @@ class Packet:
 
         header = raw_data[:HEADER_SIZE]
 
-        #Unpack header
+        # Unpack the header fields.
         seq_num, ack_num, ptype, file_id, payload_len, chksum = struct.unpack(HEADER_FORMAT_FULL, header)
 
         # Guard against an absurd declared payload length (e.g. from corruption).
@@ -134,7 +134,7 @@ class Packet:
 
         payload = raw_data[HEADER_SIZE:HEADER_SIZE + payload_len]
 
-         # Create packet with extracted checksum
+        # Build the packet from the extracted fields.
         packet = cls(seq_num, ack_num, ptype, file_id, payload, chksum)
 
         # Recompute the checksum and compare; a mismatch means the packet was corrupted.
@@ -145,7 +145,7 @@ class Packet:
 
 
     def __repr__(self):
-        # Compact debug representation, e.g. Packet(seq=3, ack=0, type=DATA, ...)
+        """Compact debug representation, e.g. Packet(seq=3, ack=0, type=DATA, ...)."""
         return (f"Packet(seq={self.seq_num}, ack={self.ack_num}, "
                 f"type={self.TYPE_NAMES.get(self.ptype, 'UNKNOWN')}, "
                 f"file_id={self.file_id}, "

@@ -1,3 +1,25 @@
+'''
+CP372 - Computer Networks, Spring 2026
+Assignment 2: Reliable Data Transfer over UDP
+
+Script Name: visualize.py
+Description: Reads the results.csv produced by run_experiments.py, averages each
+             configuration over its trials, writes summary.csv (the numbers used
+             for the report tables) and renders the comparison charts into the
+             repo-root media/ folder.
+Capabilities:
+    - Average transfer time, throughput and retransmissions per configuration
+    - Write summary.csv and print the report tables
+    - Render transfer-time, throughput, retransmission and corruption charts
+
+Authors:
+    Obeidi, Bassil
+    Barghouti, Alaa
+    Ozog, Philip
+    Soja, Max
+    Yamin, Noah
+'''
+
 import csv
 import os
 import statistics
@@ -7,10 +29,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-RESULTS_CSV = os.path.join(PROJECT_ROOT, "results.csv")
-SUMMARY_CSV = os.path.join(PROJECT_ROOT, "summary.csv")
-PLOTS_DIR = os.path.join(PROJECT_ROOT, "plots")
+# CSV artifacts are produced/consumed inside experiments/ (see
+# run_experiments.py); rendered charts go to the repo-root media/ folder
+# alongside the other figures used in the report.
+EXPERIMENTS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(EXPERIMENTS_DIR)
+RESULTS_CSV = os.path.join(EXPERIMENTS_DIR, "results.csv")
+SUMMARY_CSV = os.path.join(EXPERIMENTS_DIR, "summary.csv")
+MEDIA_DIR = os.path.join(PROJECT_ROOT, "media")
 
 SIZE_LABELS = {
     10 * 1024: "10KB",
@@ -142,8 +168,8 @@ def plot_metric_vs_size(averaged, sizes, metric, ylabel, title, filename):
         ax.grid(True, which="both", alpha=0.3)
     fig.suptitle(title)
     fig.tight_layout()
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-    fig.savefig(os.path.join(PLOTS_DIR, filename))
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    fig.savefig(os.path.join(MEDIA_DIR, filename))
     plt.close(fig)
 
 
@@ -174,8 +200,8 @@ def plot_retransmissions(averaged, sizes):
 
     fig.suptitle("Average Retransmissions vs Loss Rate")
     fig.tight_layout()
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-    fig.savefig(os.path.join(PLOTS_DIR, "plot_retransmissions.png"))
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    fig.savefig(os.path.join(MEDIA_DIR, "plot_retransmissions.png"))
     plt.close(fig)
 
 
@@ -212,8 +238,8 @@ def plot_corruption(averaged):
 
     fig.suptitle("Transfer Time vs Corruption Rate")
     fig.tight_layout()
-    os.makedirs(PLOTS_DIR, exist_ok=True)
-    fig.savefig(os.path.join(PLOTS_DIR, "plot_corruption.png"))
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    fig.savefig(os.path.join(MEDIA_DIR, "plot_corruption.png"))
     plt.close(fig)
 
 
@@ -241,7 +267,7 @@ def main():
     plot_corruption(averaged)
 
     print(f"\nSummary written to {SUMMARY_CSV}")
-    print(f"Plots written to {PLOTS_DIR}")
+    print(f"Plots written to {MEDIA_DIR}")
 
 
 if __name__ == "__main__":

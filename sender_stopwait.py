@@ -11,7 +11,6 @@ Capabilities:
     - Notify the receiver of an incoming file (START packet)
     - Send file content one packet at a time and wait for each ACK
     - Retransmit on timeout using 1-bit alternating sequence numbers
-    - Optionally simulate corruption of incoming ACKs (bonus testing)
 
 Authors:
     Obeidi, Bassil
@@ -78,7 +77,7 @@ def send_and_wait_for_ack(sock, packet, server_addr, expected_ack_num, corruptio
             try:
                 data, addr = sock.recvfrom(2048)
 
-                # Simulate bit-level corruption of the ACK
+                # Simulate bit-level corruption of an incoming packet's payload.
                 if len(data) > HEADER_SIZE and random.random() < corruption_rate:
                     data = bytearray(data)
                     idx = random.randint(HEADER_SIZE, len(data) - 1)
@@ -91,13 +90,13 @@ def send_and_wait_for_ack(sock, packet, server_addr, expected_ack_num, corruptio
                 except ValueError as e:
                     # Corrupted/short ACK; ignore it and keep waiting for a good one.
                     print(f"Bad packet received: {e}")
-                    continue  # Stay in inner loop, keep waiting
+                    continue  # stay in inner loop, keep waiting
 
                 # Correct ACK for the packet we sent -> success.
                 if ack_pkt.ptype == Packet.TYPE_ACK and ack_pkt.ack_num == expected_ack_num:
                     return True
 
-                # Wrong ACK — keep waiting, don't count as retry
+                # Wrong ACK; keep waiting and don't count it as a retry.
                 print(f"Stale ACK (ack_num={ack_pkt.ack_num}), still waiting...")
 
             except socket.timeout:
@@ -108,27 +107,27 @@ def send_and_wait_for_ack(sock, packet, server_addr, expected_ack_num, corruptio
                 if retries >= MAX_RETRIES:
                     print("Max retries reached, giving up.")
                     return False
-                break  # Break inner, retransmit in outer
+                break  # break inner loop, retransmit in outer
 
 def send_file(sock, file_name, server_addr, corruption_rate):
     """Send the actual file data in chunks."""
     global retransmission_count
     retransmission_count = 0
 
-    seq_num = 0  # Start with 0, will flip to 1 and back
+    seq_num = 0  # start at 0, flips to 1 and back
 
-    # Step 1: Notify server (START)
+    # Step 1: Notify the server that a transfer is starting (START packet).
     if not notify_server(sock, file_name, server_addr, seq_num, corruption_rate):
         print("Failed to start transfer")
         return
-    seq_num = 1 - seq_num  # Flip: 0 → 1
+    seq_num = 1 - seq_num  # flip: 0 -> 1
 
     # Step 2: Send file chunks, one packet at a time.
     with open(file_name, "rb") as file:
         while True:
             chunk = file.read(CHUNK_SIZE)
             if not chunk:
-                break  # End of file
+                break  # end of file
 
             data_pkt = Packet(
                 seq_num=seq_num,
@@ -141,13 +140,13 @@ def send_file(sock, file_name, server_addr, corruption_rate):
                 print("Transfer failed")
                 return
 
-            seq_num = 1 - seq_num  # Flip for next packet: 0<->1
+            seq_num = 1 - seq_num  # flip for the next packet: 0 <-> 1
 
-    # Step 3: Send END packet to signal completion.
+    # Step 3: Send the END packet to signal completion.
     end_pkt = Packet(
         seq_num=seq_num,
         ptype=Packet.TYPE_END,
-        payload=b''  # Empty payload
+        payload=b''  # empty payload
     )
     if not send_and_wait_for_ack(sock, end_pkt, server_addr, seq_num, corruption_rate):
         print("Unable to notify server of transfer completion.")

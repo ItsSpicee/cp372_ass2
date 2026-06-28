@@ -1,3 +1,26 @@
+'''
+CP372 - Computer Networks, Spring 2026
+Assignment 2: Reliable Data Transfer over UDP
+
+Script Name: run_experiments.py
+Description: Part D automation. Drives the Stop-and-Wait and Go-Back-N
+             sender/receiver scripts across every file size, loss rate and
+             corruption rate (5 trials each), measuring transfer time,
+             throughput and retransmissions, and writes the raw per-trial
+             results to results.csv for visualize.py to summarise.
+Capabilities:
+    - Generate random test files of each required size
+    - Run both protocols over the full size / loss / corruption matrix
+    - Record per-trial transfer time, throughput and retransmissions to CSV
+
+Authors:
+    Obeidi, Bassil
+    Barghouti, Alaa
+    Ozog, Philip
+    Soja, Max
+    Yamin, Noah
+'''
+
 import os
 import sys
 import csv
@@ -6,10 +29,14 @@ import time
 import argparse
 import subprocess
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-TEST_FILES_DIR = os.path.join(PROJECT_ROOT, "test_files")
-RECEIVED_DIR = os.path.join(PROJECT_ROOT, "received_files")
-RESULTS_CSV = os.path.join(PROJECT_ROOT, "results.csv")
+# This script lives in experiments/; the sender/receiver scripts are in the
+# repo root (its parent). Generated artifacts are kept inside experiments/ so
+# the repo root stays limited to the files being marked.
+EXPERIMENTS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(EXPERIMENTS_DIR)
+TEST_FILES_DIR = os.path.join(EXPERIMENTS_DIR, "test_files")
+RECEIVED_DIR = os.path.join(EXPERIMENTS_DIR, "received_files")
+RESULTS_CSV = os.path.join(EXPERIMENTS_DIR, "results.csv")
 
 SENDER_SCRIPTS = {
     "stopwait": os.path.join(PROJECT_ROOT, "sender_stopwait.py"),
@@ -39,6 +66,39 @@ PROTOCOLS = ["stopwait", "gbn"]
 
 RETRANS_RE = re.compile(r"RETRANSMISSIONS:\s*(\d+)")
 BIND_WAIT = 0.2
+
+# The per-trial sender timeout is a safety net against a deadlocked or
+# livelocked transfer (dead receiver, stuck bind, infinite retransmission), not
+# a performance target. A single flat value cannot serve a 10,000x file-size
+# range: 120s is fine for 10KB but truncates a legitimately slow 1MB/0.3-loss
+# transfer, poisoning its measurement. Instead we size the timeout to the
+# worst-case expected throughput for the link condition, so only a genuinely
+# stuck transfer ever hits it while a healthy-but-slow one is allowed to finish.
+#
+# Throughput floors (bytes/sec) are read off the measured 1MB results: the
+# slowest healthy transfer observed at each degradation level. Loss and
+# corruption are swept independently, so the effective floor is whichever of the
+# two is lower.
+LOSS_THROUGHPUT_FLOOR = {0.0: 1_000_000, 0.1: 25_000, 0.2: 10_000, 0.3: 5_000}
+CORRUPTION_THROUGHPUT_FLOOR = {0.0: 1_000_000, 0.05: 55_000, 0.10: 25_000, 0.15: 18_000}
+TIMEOUT_SAFETY_FACTOR = 3.0   # headroom over the expected completion time
+MIN_TIMEOUT = 60.0            # floor so tiny files still get a real kill switch
+
+
+def _throughput_floor(rate, table):
+    # Exact match when the rate is one of the swept values; otherwise fall back
+    # to the floor of the nearest-or-worse degradation (the conservative choice,
+    # since a lower floor yields a longer, safer timeout).
+    if rate in table:
+        return table[rate]
+    worse_or_equal = [v for k, v in table.items() if k >= rate]
+    return min(worse_or_equal) if worse_or_equal else min(table.values())
+
+
+def compute_timeout(size, loss_rate, corruption_rate):
+    floor = min(_throughput_floor(loss_rate, LOSS_THROUGHPUT_FLOOR),
+                _throughput_floor(corruption_rate, CORRUPTION_THROUGHPUT_FLOOR))
+    return max(MIN_TIMEOUT, (size / floor) * TIMEOUT_SAFETY_FACTOR)
 
 
 def generate_test_files(sizes):
@@ -106,8 +166,12 @@ def run_sender(protocol, file_name, loss_rate, corruption_rate, timeout):
     return elapsed, retransmissions, success
 
 
-def run_trial(protocol, label, size, loss_rate, corruption_rate, trial, writer, csv_file, timeout):
+def run_trial(protocol, label, size, loss_rate, corruption_rate, trial, writer, csv_file, timeout_override):
     file_name = f"file_{label}.bin"
+    # A flat --timeout override (if given) wins; otherwise scale the safety-net
+    # timeout to this trial's size and link condition.
+    timeout = (timeout_override if timeout_override is not None
+               else compute_timeout(size, loss_rate, corruption_rate))
     receiver = start_receiver(protocol, loss_rate, corruption_rate)
     try:
         elapsed, retransmissions, success = run_sender(
@@ -140,8 +204,10 @@ def main():
     parser = argparse.ArgumentParser(description="RDT experiment automation")
     parser.add_argument("--quick", action="store_true",
                          help="Run a small reduced matrix for smoke-testing")
-    parser.add_argument("--timeout", type=float, default=120.0,
-                         help="Per-trial sender timeout in seconds (safety net)")
+    parser.add_argument("--timeout", type=float, default=None,
+                         help="Flat per-trial sender timeout override in seconds. "
+                              "If omitted, the timeout is scaled per trial from the "
+                              "file size and link condition (see compute_timeout).")
     parser.add_argument("--skip-bonus", action="store_true",
                          help="Skip the corruption-rate bonus matrix")
     args = parser.parse_args()

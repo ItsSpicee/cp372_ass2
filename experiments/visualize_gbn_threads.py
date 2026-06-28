@@ -1,29 +1,41 @@
-"""
-Live visualization of the REAL Go-Back-N sender's multithreading.
+'''
+CP372 - Computer Networks, Spring 2026
+Assignment 2: Reliable Data Transfer over UDP
 
-This does not fake the protocol: it imports the actual `send_file_gbn` and
-`ack_receiver` from sender_gbn.py and runs them against the actual
-`receiver_loop` from receiver_gbn.py (in-process, on a temp UDP port, exactly
-like test_parallel_multiplex.py). The sender is lightly instrumented via
-gbn_trace, so every real SEND / WAIT / PROCESS_ACK / RETRANSMIT (per sender
-thread) and RECV / NOTIFY (the single shared ack_receiver thread) is recorded
-with a timestamp and drawn as a swimlane / Gantt timeline.
+Script Name: visualize_gbn_threads.py
+Description: Live visualization of the real Go-Back-N sender's multithreading. It
+             imports the actual send_file_gbn / ack_receiver (sender_gbn.py) and
+             receiver_loop (receiver_gbn.py) and runs them in-process over a temp
+             UDP port, lightly instrumented via gbn_trace, drawing every thread's
+             SEND / WAIT / PROCESS_ACK / RETRANSMIT / RECV / NOTIFY events as a
+             swimlane / Gantt timeline.
+Capabilities:
+    - Record real per-thread protocol events with timestamps
+    - Draw a live animated timeline, or render headless to a GIF/PNG
+    - Pace concurrency so the genuinely-concurrent threads are watchable
 
-What you see:
-  * one lane per thread: `ack_receiver` on top, then `sender 0..N-1`,
-  * colored bars showing what each thread is doing over time,
-  * orange arrows = the ack_receiver waking a specific sender's Condition,
-  * green SEND bars across senders are serialized by the shared socket lock.
+Authors:
+    Obeidi, Bassil
+    Barghouti, Alaa
+    Ozog, Philip
+    Soja, Max
+    Yamin, Noah
+'''
 
-Modes:
-  python visualize_gbn_threads.py                 # LIVE animated window
-  python visualize_gbn_threads.py --files 4
-  python visualize_gbn_threads.py --gif out.gif   # headless: record to a GIF
-
-`--pace` (default 0.05s) slows each traced step so concurrency is watchable; the
-threads are genuinely running concurrently, just paced. Set --pace 0 for the
-raw, full-speed timeline.
-"""
+# What you see:
+#   * one lane per thread: ack_receiver on top, then sender 0..N-1,
+#   * colored bars showing what each thread is doing over time,
+#   * orange arrows = the ack_receiver waking a specific sender's Condition,
+#   * green SEND bars across senders are serialized by the shared socket lock.
+#
+# Modes (run from the repo root):
+#   python experiments/visualize_gbn_threads.py                 # live animated window
+#   python experiments/visualize_gbn_threads.py --files 4
+#   python experiments/visualize_gbn_threads.py --gif out.gif   # headless: record a GIF
+#
+# --pace (default 0.05s) slows each traced step so concurrency is watchable; the
+# threads are genuinely running concurrently, just paced. Set --pace 0 for the
+# raw, full-speed timeline.
 
 import argparse
 import os
@@ -33,6 +45,12 @@ import tempfile
 import threading
 import time
 import contextlib
+
+# This visualizer lives in experiments/; the protocol code (sender_gbn.py,
+# receiver_gbn.py, gbn_trace.py, packet.py) is in the repo root, so put the
+# repo root on the import path.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
 
 import gbn_trace
 

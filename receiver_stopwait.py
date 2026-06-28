@@ -79,12 +79,12 @@ def receiver_loop(sock, loss_rate, corruption_rate):
                 pkt = Packet.from_bytes(data)
             except ValueError as e:
                 print(f"Corrupted packet, discarding: {e}")
-                # Don't ACK corrupted packets — sender will timeout and retransmit
+                # Don't ACK corrupted packets; the sender will time out and retransmit.
                 continue
 
             print(f"Received: seq={pkt.seq_num}, type={pkt.ptype}")
 
-            # === TYPE_START: Begin file transfer ===
+            # TYPE_START: begin a new file transfer.
             if pkt.ptype == Packet.TYPE_START:
                 # Validate the filename to avoid unsafe paths before opening it.
                 raw_name = os.path.basename(pkt.payload.decode('utf-8', errors='replace'))
@@ -94,65 +94,65 @@ def receiver_loop(sock, loss_rate, corruption_rate):
                 file_name = raw_name
                 print(f"Starting transfer: '{file_name}'")
 
-                # Create/truncate file
+                # Create/truncate the output file.
                 file_handle = open(file_name, "wb")
                 transfer_active = True
 
-                # ACK the START packet
+                # ACK the START packet.
                 send_ack(sock, addr, pkt.seq_num)
 
-                # Set expected_seq to the NEXT sequence number
-                expected_seq = 1 - pkt.seq_num  # Flip: 0→1 or 1→0
+                # Set expected_seq to the next sequence number.
+                expected_seq = 1 - pkt.seq_num  # flip: 0 -> 1 or 1 -> 0
 
-            # === TYPE_DATA: File chunk ===
+            # TYPE_DATA: a chunk of file content.
             elif pkt.ptype == Packet.TYPE_DATA:
                 if not transfer_active:
                     print("DATA before START, ignoring")
                     continue
 
                 if pkt.seq_num == expected_seq:
-                    # In-order packet — write to file
+                    # In-order packet — write it to the file.
                     file_handle.write(pkt.payload)
                     print(f"Wrote {len(pkt.payload)} bytes")
 
-                    # ACK it
+                    # ACK it.
                     send_ack(sock, addr, pkt.seq_num)
 
-                    # Flip expected sequence number
+                    # Flip the expected sequence number.
                     expected_seq = 1 - expected_seq
 
                 else:
-                    # Duplicate packet (sender didn't get our ACK, retransmitted)
+                    # Duplicate packet (the sender missed our ACK and retransmitted).
                     print(f"Unexpected seq={pkt.seq_num}, expected={expected_seq}")
                     print("Duplicate packet — re-sending ACK for last valid packet")
 
-                    # CRITICAL: Re-send ACK for the LAST VALID packet
-                    # This is what the sender is waiting for!
+                    # Re-send the ACK for the last valid packet, which is what
+                    # the sender is currently waiting for.
                     last_valid = 1 - expected_seq
                     send_ack(sock, addr, last_valid)
 
-            # === TYPE_END: Finish transfer ===
+            # TYPE_END: the file transfer is complete.
             elif pkt.ptype == Packet.TYPE_END:
                 if not transfer_active:
                     print("END before START, ignoring")
                     continue
 
-                # Close file
+                # Close the file.
                 if file_handle:
                     file_handle.close()
                     file_handle = None
 
                 print(f"Transfer complete: '{file_name}'")
 
-                # ACK the END packet
+                # ACK the END packet.
                 send_ack(sock, addr, pkt.seq_num)
 
-                # Reset for next transfer
+                # Reset for the next transfer.
                 transfer_active = False
                 file_name = None
-                expected_seq = 0  # Reset for next file
+                expected_seq = 0  # reset for the next file
 
-            # === TYPE_ACK: Shouldn't receive ACKs ===
+            # TYPE_ACK: a receiver should never receive ACKs.
             elif pkt.ptype == Packet.TYPE_ACK:
                 print("Received ACK on receiver? Ignoring.")
 

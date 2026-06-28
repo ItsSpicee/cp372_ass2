@@ -13,7 +13,6 @@ Capabilities:
     - Go-Back-N sliding window with cumulative ACKs and one base timer
     - Retransmit the full window on timeout
     - Transfer 1..255 files concurrently over a single socket (parallel bonus)
-    - Optionally simulate corruption of incoming ACKs (bonus testing)
 
 Authors:
     Obeidi, Bassil
@@ -82,7 +81,7 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
         # Keep going until everything sent has been acknowledged.
         while base != nextseqnum or not eof_reached:
 
-            # Send new packets while window allows
+            # Send new packets while the window has room.
             while ((nextseqnum - base) % MAX_SEQ) < WINDOW_SIZE:
                 if not started:
                     # First packet is START, carrying the file name.
@@ -117,7 +116,6 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                 nextseqnum = (nextseqnum + 1) % MAX_SEQ
 
             # Wait briefly to be notified of ACKs (or to re-check the timeout).
-            # Wait for ACKs or timeout
             trace("WAIT", file_id)
             with cond:
                 cond.wait(timeout=0.01)
@@ -134,7 +132,7 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                     print(f"{tag} Cumulative ACK up to {ack_num}")
                     trace("PROCESS_ACK", file_id, ack=ack_num)
 
-                    # Free acked packets (with wraparound)
+                    # Free acked packets (handling sequence-number wraparound).
                     seq = base
                     while seq != new_base:
                         buffer.pop(seq, None)
@@ -183,7 +181,7 @@ def ack_receiver(sock, corruption_rate, ack_states, stop_event):
         try:
             data = sock.recvfrom(INPUT_BUFFER_SIZE)[0]
 
-            # Simulate bit-level corruption of the ACK
+            # Simulate bit-level corruption of an incoming packet's payload.
             if len(data) > HEADER_SIZE and random.random() < corruption_rate:
                 data = bytearray(data)
                 idx = random.randint(HEADER_SIZE, len(data) - 1)

@@ -32,28 +32,35 @@ asked for a single file it behaves exactly like the standard Go-Back-N
 protocol required by Part C, so the base assignment still runs unchanged.
 
 Correctness testing:
-- test_parallel_multiplex.py contains 15 unit tests, all passing. They verify:
+- tests/test_parallel_multiplex.py contains 15 unit tests, all passing. They verify:
     * the file_id survives encode/decode and is covered by the checksum,
     * two and four files transferred simultaneously all arrive complete,
     * each received file matches the original byte-for-byte (MD5 compared),
     * files are never mixed (no foreign bytes in any output file),
     * multi-file transfer still succeeds with 10% simulated packet loss.
-  Run them with:  python -m unittest test_parallel_multiplex
+  Run them with:  python -m unittest discover -s tests
 
 
 2. PACKET CORRUPTION + CHECKSUM (Option B)
 ------------------------------------------
 - Every packet includes an 8-bit checksum computed over the full header (minus
   the checksum byte itself) and the payload, folded into 8 bits and inverted.
-- A --corruption-rate flag on the receivers (and on the senders for incoming
-  ACKs) flips one random bit in a packet with the given probability before it
-  is parsed.
+- A --corruption-rate flag on the receivers flips one random bit in an incoming
+  packet's payload with the given probability before it is parsed.
 - Packet.from_bytes() recomputes the checksum and rejects any packet whose
   checksum does not match. A corrupted packet is dropped silently with no ACK,
   and the normal timeout/retransmit machinery recovers it - no separate
   corruption-handling code path was needed.
-- run_experiments.py includes a corruption-rate matrix (0%, 5%, 10%, 15%) so
+- experiments/run_experiments.py includes a corruption-rate matrix (0%, 5%, 10%, 15%) so
   the effect of corruption on transfer time can be measured alongside loss.
+- We initially considered corrupting ACKs as well, but ACK packets are header-
+  only (they carry no payload). The only bytes available to flip in an ACK are
+  header fields such as the payload-length field, and corrupting that makes the
+  declared size inconsistent with the actual packet, so it gets rejected by a
+  length check rather than cleanly by the checksum we built for error detection.
+  Since Option B only asks for corrupting packets and detecting it with a
+  checksum - which our DATA/START path already does - we limited corruption to
+  payload-bearing packets and kept ACKs intact.
 
 
 HOW TO DEMONSTRATE

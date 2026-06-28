@@ -56,7 +56,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
     (START/DATA/END) and ACK it; otherwise discard it and re-ACK the last
     in-order packet (classic Go-Back-N receiver behaviour).
     """
-    # Per-file state keyed by file_id
+    # Per-file reassembly state, keyed by file_id.
     file_states = {}
 
     def get_state(fid):
@@ -86,7 +86,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
                 data[idx] ^= (1 << bit)
                 data = bytes(data)
 
-            # Parse packet (handle corruption)
+            # Parse the packet; a corrupted one raises ValueError.
             try:
                 pkt = Packet.from_bytes(data)
             except ValueError as e:
@@ -101,7 +101,7 @@ def receiver_loop(sock, loss_rate, corruption_rate):
             print(f"{tag} Received: seq={pkt.seq_num}, type={pkt.ptype}")
 
             if pkt.seq_num == st['expected_seq']:
-                # In-order packet — process by type
+                # In-order packet — process it by type.
                 if pkt.ptype == Packet.TYPE_START:
                     # Validate filename before opening, then create the file.
                     raw_name = os.path.basename(pkt.payload.decode('utf-8', errors='replace'))
@@ -129,21 +129,21 @@ def receiver_loop(sock, loss_rate, corruption_rate):
                         st['file_handle'] = None
                     print(f"{tag} Transfer complete: '{st['file_name']}'")
                     send_ack(sock, addr, pkt.seq_num, fid)
-                    # Reset state for this file_id so it can be reused
+                    # Reset state for this file_id so it can be reused.
                     st['expected_seq'] = 0
                     st['file_name'] = None
-                    continue  # Wait for next packet
+                    continue  # wait for the next packet
 
-                # Send ACK and advance expected sequence
+                # Send the ACK and advance the expected sequence number.
                 send_ack(sock, addr, pkt.seq_num, fid)
                 st['expected_seq'] = (st['expected_seq'] + 1) % MAX_SEQ
 
             else:
-                # Out-of-order — drop and re-ACK last valid
+                # Out-of-order — drop it and re-ACK the last valid packet.
                 print(f"{tag} Out-of-order: got {pkt.seq_num}, expected {st['expected_seq']}")
                 if st['expected_seq'] > 0:
                     send_ack(sock, addr, (st['expected_seq'] - 1) % MAX_SEQ, fid)
-                # If expected_seq == 0, nothing valid received yet — don't ACK
+                # If expected_seq == 0, nothing valid received yet — don't ACK.
 
     finally:
         # Close any open output files on shutdown/error.

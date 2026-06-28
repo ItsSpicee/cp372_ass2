@@ -1,3 +1,26 @@
+'''
+CP372 - Computer Networks, Spring 2026
+Assignment 2: Reliable Data Transfer over UDP
+
+Script Name: test_parallel_multiplex.py
+Description: Unit tests for the parallel multi-file transfer bonus. Runs the real
+             Go-Back-N sender and receiver in-process over a temporary UDP port
+             and checks that several files transferred at once arrive complete,
+             intact and unmixed, including under simulated packet loss.
+Capabilities:
+    - Verify the file_id field survives encode/decode and is covered by the checksum
+    - Transfer two and four files concurrently and compare each to its original (MD5)
+    - Confirm files are never mixed and that transfers survive 10% packet loss
+    - Validate file-name checking (an extension is required)
+
+Authors:
+    Obeidi, Bassil
+    Barghouti, Alaa
+    Ozog, Philip
+    Soja, Max
+    Yamin, Noah
+'''
+
 import os
 import sys
 import time
@@ -8,7 +31,10 @@ import tempfile
 import shutil
 import unittest
 
-sys.path.insert(0, os.path.dirname(__file__))
+# This test lives in tests/; the protocol code (sender_gbn.py, receiver_gbn.py,
+# packet.py) is in the repo root, so put the repo root on the import path.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
 
 from packet import Packet, HEADER_SIZE
 from sender_gbn import send_file_gbn, ack_receiver, check_file_name, InvalidFileName
