@@ -6,6 +6,7 @@ import random
 import argparse
 import threading
 from packet import Packet, HEADER_SIZE
+from gbn_trace import trace  # no-op unless a visualizer attaches (see gbn_trace.py)
 
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = 6970
@@ -67,6 +68,7 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                 buffer[nextseqnum] = pkt
 
                 print(f"{tag} Sent packet {nextseqnum} (type={ptype})")
+                trace("SEND", file_id, seq=nextseqnum, ptype=ptype)
 
                 if base == nextseqnum:
                     timer_start = time.time()
@@ -74,6 +76,7 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                 nextseqnum = (nextseqnum + 1) % MAX_SEQ
 
             # Wait for ACKs or timeout
+            trace("WAIT", file_id)
             with cond:
                 cond.wait(timeout=0.01)
 
@@ -86,6 +89,7 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                 if ((ack_num - base) % MAX_SEQ) < WINDOW_SIZE:
                     new_base = (ack_num + 1) % MAX_SEQ
                     print(f"{tag} Cumulative ACK up to {ack_num}")
+                    trace("PROCESS_ACK", file_id, ack=ack_num)
 
                     # Free acked packets (with wraparound)
                     seq = base
@@ -111,11 +115,13 @@ def send_file_gbn(sock, sock_lock, file_name, server_addr, corruption_rate, file
                             sock.sendto(buffer[seq].to_bytes(), server_addr)
                     seq = (seq + 1) % MAX_SEQ
                 print(f"{tag} Timeout! Retransmitting {count} packet(s) from base={base}")
+                trace("RETRANSMIT", file_id, base=base, count=count)
                 retransmission_count += count
                 timer_start = time.time()
 
     print(f"{tag} File transfer complete!")
     print(f"{tag} RETRANSMISSIONS: {retransmission_count}")
+    trace("DONE", file_id)
 
 def ack_receiver(sock, corruption_rate, ack_states, stop_event):
     while not stop_event.is_set():
@@ -137,12 +143,14 @@ def ack_receiver(sock, corruption_rate, ack_states, stop_event):
 
             if ack_pkt.ptype == Packet.TYPE_ACK:
                 fid = ack_pkt.file_id
+                trace("RECV", fid, ack=ack_pkt.ack_num)
                 if fid in ack_states:
                     state = ack_states[fid]
                     with state['lock']:
                         state['ack_queue'].append(ack_pkt.ack_num)
                     with state['condition']:
                         state['condition'].notify()
+                        trace("NOTIFY", fid, ack=ack_pkt.ack_num)
                 else:
                     print(f"[ack_receiver] Unknown file_id={fid}, ignoring ACK")
 
